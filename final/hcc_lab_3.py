@@ -422,10 +422,10 @@ def main():
                             unknown_tags_at[tag_id] = []
                         
                         # Calculate unknown tag's world position
-                        # tag_world_pos = drone_wpose_at + np.array([tag_info['pose'][0], tag_info['pose'][2]])
-                        tag_world_pos = np.array(drone_wpose_kf[:2]).flatten() + np.array([tag_info['pose'][0], tag_info['pose'][2]]) # try to use kalman filter position
+                        tag_world_pos = drone_wpose_at + np.array([tag_info['pose'][0], tag_info['pose'][2]])
+                        tag_world_pos_kf = np.array(drone_wpose_kf[:2]).flatten() + np.array([tag_info['pose'][0], tag_info['pose'][2]]) # try to use kalman filter position
                         unknown_tags_at[tag_id].append(tag_world_pos)
-                        unknown_tags_kf[tag_id] = unknown_tags_at[tag_id].copy()  # Store for Kalman filter
+                        unknown_tags_kf[tag_id].append(tag_world_pos_kf) # Store for Kalman filter
                         print(f"Unknown tag {tag_id} detected at: {tag_world_pos}")
                     
                     else:
