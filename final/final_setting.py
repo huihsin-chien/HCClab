@@ -18,10 +18,19 @@ ar_word = { # AprilTag在世界座標的真實位置（x, y）。meters
 
 
 professor_landing_spots = {
-    'hh_shuai': [1, 3],
-    'lc_wang': [0, 2], 
-    'lw_ko': [0, 1],
-    'cc_wang': [-1, 3]
+    'hh_shuai': [0, 1.5],
+    'lc_wang': [0.75, 0.75], 
+    'lw_ko': [0.75, 2.25],
+    'cc_wang': [-0.75, 2.25]
 }
+# Landing spots
+#                   (0, 0)
+
+# (75, 75)     (0, 75)     (-75, 75)
+
+# (75, 150)   (0, 150)   (-75, 150)
+
+# (75, 225)   (0, 225)   (-75, 225)
+
 
 landing_spot = None
