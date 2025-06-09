@@ -79,7 +79,12 @@ class KalmanFilter:
         return self.mu, self.Sigma
 
 def detect_apriltag(frame_read, at_detector, camera_params, tag_size):
-    """Detect AprilTags in the current frame"""
+    """Detect AprilTags in the current frame,
+       回傳: tags_info (list of dicts with tag_id and pose),
+       Each dict contains:
+        - 'id': AprilTag ID
+        - 'pose': (x, y, z) position relative to camera in meters"""
+
     print("Detecting AprilTag...")
     tags_info = []
     frame = frame_read.frame
@@ -106,6 +111,13 @@ def detect_apriltag(frame_read, at_detector, camera_params, tag_size):
 
     # Show live feed
     cv2.imshow("Tello Stream with AprilTag", frame)
+    #save image
+    try:
+        cv2.imwrite(f"./tello_apriltag_{time.time}.jpg", frame)
+        
+    except Exception as e:
+        print(f"Failed to save image: {e}")
+        pass
     cv2.waitKey(1)
 
     return tags_info
@@ -169,6 +181,8 @@ def calculate_drone_position(known_tag_id, tag_pose, ar_word):
         # Convert camera coordinates to world coordinates
         drone_x = ar_word[known_tag_id][0] - tag_pose[0]
         drone_y = ar_word[known_tag_id][1] - tag_pose[2]
+        # print(f"Tag {known_tag_id} detected at: {tag_pose}")
+        print(f"at drone pose using tag {known_tag_id}: {drone_x}, {drone_y}")
         return np.array([drone_x, drone_y])
     return None
 
@@ -233,15 +247,7 @@ def plot_trajectory(control_poses, tag_pose, kalmanfilter_pose):
     plt.axis("equal")
     plt.show()
 
-def show_stream(frame_read):
-    """Show video stream in separate thread"""
-    while True:
-        frame = frame_read.frame
-        if frame is not None:
-            cv2.imshow("Tello Stream", frame)
-            if cv2.waitKey(1) & 0xFF == ord('q'):
-                break
-    cv2.destroyAllWindows()
+
 
 def main():
     # Competition start time
@@ -282,9 +288,6 @@ def main():
         print("Failed to get video stream")
         return
     
-    # Start stream display thread
-    # stream_thread = threading.Thread(target=show_stream, args=(frame_read,), daemon=True)
-    # stream_thread.start()
     
     # Take off
     print("Taking off...")
@@ -339,7 +342,6 @@ def main():
         print("Phase 2: AprilTag Detection")
         
         # Move forward to detect AprilTags
-        # DEBUG
         dp = tello_command(tello, ("forward", 200))
         drone_wpose_ct += dp
         
@@ -356,12 +358,14 @@ def main():
                         # Found known tag for localization
                         detected_tag_id = tag_info['id']
                         at_pose = tag_info['pose']
+                        # print(f"Detected known tag {detected_tag_id} at position: {at_pose}")
                         drone_wpose_at = calculate_drone_position(detected_tag_id, at_pose, final_setting.ar_word)
                         
                         if drone_wpose_at is not None:
                             # Update Kalman filter
                             KF.predict(np.expand_dims(dp, axis=1))
                             drone_wpose_kf = KF.update(np.expand_dims(np.append(drone_wpose_at, 0), axis=1))
+                            print(f"drone_wpose_kf: {drone_wpose_kf}")
                             localization_found = True
                             print(f"Localized using tag {detected_tag_id} at position: {drone_wpose_at}")
                             break
@@ -402,7 +406,8 @@ def main():
                         if drone_wpose_at is not None:
                             KF.predict(np.zeros((3, 1)))
                             drone_wpose_kf = KF.update(np.expand_dims(np.append(drone_wpose_at, 0), axis=1))
-            
+                            print(f"drone_wpose_kf: {drone_wpose_kf}")
+
             # Record trajectory
             d_wposes_ct.append(drone_wpose_ct[:2].copy())
             d_wposes_at.append(drone_wpose_at.copy() if drone_wpose_at is not None else [0, 0])
