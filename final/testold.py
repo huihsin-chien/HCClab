@@ -13,7 +13,17 @@ import final_setting  # Import the settings from final_setting.py
 class KalmanFilter:
     def __init__(self):
         """
-        Improved Kalman Filter for better position tracking
+        Parameters:
+        -----------
+        u : Control input (m x 1)
+        z : Observation (k x 1)
+        A : State transition matrix (n x n)
+        B : Control input model (n x m)
+        C : Observation matrix (k x n)
+        R : Process noise covariance matrix (n x n)
+        Q : Measurement noise covariance matrix (k x k)
+        mu : state estimate (n x 1)
+        Sigma : state covariance (n x n)
         """
         # State dimension: [x, y, z] = 3
         n = 3  # state dimension
@@ -22,12 +32,10 @@ class KalmanFilter:
         self.A = np.eye(n)
         self.B = np.eye(n)
         self.C = np.eye(k)
-        # Reduced process noise for better stability
-        self.R = np.diag([0.005, 0.005, 0.005])  # Very small process noise
-        # Adjusted measurement noise based on AprilTag accuracy
-        self.Q = np.diag([0.02, 0.02, 0.05])  # Lower noise for x,y, higher for z
+        self.R = np.diag([0.01, 0.01, 0.01])  # Small process noise
+        self.Q = np.diag([0.05, 0.05, 0.05])  # Moderate measurement noise
         self.mu = np.zeros((n, 1))
-        self.Sigma = np.eye(n) * 0.5  # Smaller initial uncertainty
+        self.Sigma = np.eye(n) * 1.0
 
     def predict(self, u):
         """
@@ -167,27 +175,14 @@ def tello_command(tello, movement_request):
         
     return dp
 
-def calculate_drone_position(known_tag_id, tag_pose, ar_word, drone_yaw=0):
+def calculate_drone_position(known_tag_id, tag_pose, ar_word):
     """Calculate drone position based on known AprilTag"""
     if known_tag_id in ar_word:
-        # Tag position in camera frame (x: right, y: down, z: forward)
-        # Convert to world frame considering drone's orientation
-        cos_yaw = np.cos(np.radians(drone_yaw))
-        sin_yaw = np.sin(np.radians(drone_yaw))
-        
-        # Camera to world transformation
-        # Camera: x=right, z=forward -> World: x=right, y=forward
-        camera_x = tag_pose[0]  # right in camera frame
-        camera_z = tag_pose[2]  # forward in camera frame
-        
-        # Transform to world coordinates considering drone rotation
-        world_offset_x = cos_yaw * camera_x + sin_yaw * camera_z
-        world_offset_y = -sin_yaw * camera_x + cos_yaw * camera_z
-        
-        # Drone position = Tag world position - offset
-        drone_x = ar_word[known_tag_id][0] - world_offset_x
-        drone_y = ar_word[known_tag_id][1] - world_offset_y
-        
+        # Convert camera coordinates to world coordinates
+        drone_x = ar_word[known_tag_id][0] - tag_pose[0]
+        drone_y = ar_word[known_tag_id][1] - tag_pose[2]
+        # print(f"Tag {known_tag_id} detected at: {tag_pose}")
+        print(f"at drone pose using tag {known_tag_id}: {drone_x}, {drone_y}")
         return np.array([drone_x, drone_y])
     return None
 
@@ -252,25 +247,6 @@ def plot_trajectory(control_poses, tag_pose, kalmanfilter_pose):
     plt.axis("equal")
     plt.show()
 
-def calculate_unknown_tag_position(drone_pos, tag_pose, drone_yaw=0):
-    """Calculate unknown tag's world position from drone position and relative pose"""
-    cos_yaw = np.cos(np.radians(drone_yaw))
-    sin_yaw = np.sin(np.radians(drone_yaw))
-    
-    # Tag position in camera frame
-    camera_x = tag_pose[0]  # right
-    camera_z = tag_pose[2]  # forward
-    
-    # Transform to world coordinates
-    world_offset_x = cos_yaw * camera_x + sin_yaw * camera_z
-    world_offset_y = -sin_yaw * camera_x + cos_yaw * camera_z
-    
-    # Unknown tag world position
-    tag_world_x = drone_pos[0] + world_offset_x
-    tag_world_y = drone_pos[1] + world_offset_y
-    
-    return np.array([tag_world_x, tag_world_y])
-    
 
 
 def main():
@@ -315,9 +291,10 @@ def main():
     
     # Take off
     print("Taking off...")
-    tello.takeoff()
+
+    tello.takeoff() # DEBUG
+    
     time.sleep(3)
-    tello.move_up(50)
     
     # Competition variables
     drone_wpose_ct = np.array([0.0, 0.0, 0.0])  # Control model position
@@ -328,18 +305,16 @@ def main():
     unknown_tags = {}  # Store unknown tag positions
     professor_detected = None
     landing_spot = None
-    drone_yaw = 0.0  # Track drone's orientation
+    tello.move_up(50)
     
     try:
-        # Phase 1: Object Detection (Professor Recognition)
-
-
-        #DEBUG
-        professor_detected = "hh_shuai"
+        # Phase 1: Object Detection (Professor Recognition)``
         print("Phase 1: Professor Recognition")
         recognition_attempts = 0
         max_recognition_attempts = 20
-        
+
+        # debug 用，先預設教授名稱為 hh_shuai
+        professor_detected = 'hh_shuai'
         while professor_detected is None and recognition_attempts < max_recognition_attempts:
             frame = frame_read.frame
             if frame is not None:
@@ -353,9 +328,8 @@ def main():
             
             # Move around to get better view
             if recognition_attempts % 5 == 0:
-                dp, dyaw = tello_command(tello, ("cw", 30))  # Rotate to get different angle
+                dp = tello_command(tello, ("cw", 30))  # Rotate to get different angle
                 drone_wpose_ct += dp
-                drone_yaw += dyaw
             
             recognition_attempts += 1
             time.sleep(0.5)
@@ -366,7 +340,7 @@ def main():
         
         # Phase 2: AprilTag Detection and Position Estimation
         print("Phase 2: AprilTag Detection")
-        # tello.move_forward(200)
+        
         # Move forward to detect AprilTags
         dp = tello_command(tello, ("forward", 200))
         drone_wpose_ct += dp
@@ -384,21 +358,22 @@ def main():
                         # Found known tag for localization
                         detected_tag_id = tag_info['id']
                         at_pose = tag_info['pose']
-                        drone_wpose_at = calculate_drone_position(detected_tag_id, at_pose, final_setting.ar_word, drone_yaw)
+                        # print(f"Detected known tag {detected_tag_id} at position: {at_pose}")
+                        drone_wpose_at = calculate_drone_position(detected_tag_id, at_pose, final_setting.ar_word)
                         
                         if drone_wpose_at is not None:
                             # Update Kalman filter
                             KF.predict(np.expand_dims(dp, axis=1))
                             drone_wpose_kf = KF.update(np.expand_dims(np.append(drone_wpose_at, 0), axis=1))
+                            print(f"drone_wpose_kf: {drone_wpose_kf}")
                             localization_found = True
-                            print(f"Localized using tag {detected_tag_id} at drone position: {drone_wpose_at}, yaw: {drone_yaw}°")
+                            print(f"Localized using tag {detected_tag_id} at position: {drone_wpose_at}")
                             break
             
             if not localization_found:
                 # Rotate to search for tags
-                dp, dyaw = tello_command(tello, ("cw", 30))
+                dp = tello_command(tello, ("cw", 30))
                 drone_wpose_ct += dp
-                drone_yaw += dyaw
                 search_attempts += 1
         
         if not localization_found:
@@ -421,7 +396,8 @@ def main():
                             unknown_tags[tag_id] = []
                         
                         # Calculate unknown tag's world position
-                        tag_world_pos = drone_wpose_at + np.array([tag_info['pose'][0], tag_info['pose'][2]])
+                        # tag_world_pos = drone_wpose_at + np.array([tag_info['pose'][0], tag_info['pose'][2]])
+                        tag_world_pos = np.array(drone_wpose_kf[:2]).flatten() + np.array([tag_info['pose'][0], tag_info['pose'][2]]) # try to use kalman filter position
                         unknown_tags[tag_id].append(tag_world_pos)
                         print(f"Unknown tag {tag_id} detected at: {tag_world_pos}")
                     
@@ -431,7 +407,8 @@ def main():
                         if drone_wpose_at is not None:
                             KF.predict(np.zeros((3, 1)))
                             drone_wpose_kf = KF.update(np.expand_dims(np.append(drone_wpose_at, 0), axis=1))
-            
+                            print(f"drone_wpose_kf: {drone_wpose_kf}")
+
             # Record trajectory
             d_wposes_ct.append(drone_wpose_ct[:2].copy())
             d_wposes_at.append(drone_wpose_at.copy() if drone_wpose_at is not None else [0, 0])
@@ -450,7 +427,6 @@ def main():
         
         # Phase 4: Navigate to Landing Spot
         print("Phase 4: Navigate to Landing Spot")
-        landing_spot = (0.5, 2.0)
         if landing_spot:
             current_pos = drone_wpose_kf[:2].flatten() if drone_wpose_kf is not None else drone_wpose_at
             target_pos = np.array(landing_spot)
@@ -487,7 +463,7 @@ def main():
         print(f"Unknown tags found: {list(unknown_tags.keys())}")
         print(f"Final position: {final_pos if 'final_pos' in locals() else 'Unknown'}")
         print(f"Total time: {total_time:.2f}s")
-        # print("error unknown tags positions:")
+
 
         # Calculate errors for known tags
         print("\n=== Error Analysis ===")
@@ -498,7 +474,6 @@ def main():
         print(f"Error for tag 201: {error201:.3f}m")
         error202 = np.linalg.norm(np.array([-1.5, 2.08]) - np.mean(unknown_tags.get(202, [[0, 0]]), axis=0))
         print(f"Error for tag 202: {error202:.3f}m")
-
         
     except Exception as e:
         print(f"Error during competition: {e}")
