@@ -422,6 +422,7 @@ def main():
                         
                         # Calculate unknown tag's world position
                         tag_world_pos = drone_wpose_at + np.array([tag_info['pose'][0], tag_info['pose'][2]])
+                        # tag_world_pos = np.array(drone_wpose_kf[:2]).flatten() + np.array([tag_info['pose'][0], tag_info['pose'][2]]) # try to use kalman filter position
                         unknown_tags[tag_id].append(tag_world_pos)
                         print(f"Unknown tag {tag_id} detected at: {tag_world_pos}")
                     
@@ -438,8 +439,8 @@ def main():
             d_wposes_kf.append(drone_wpose_kf[:2].flatten() if drone_wpose_kf is not None else [0, 0])
             
             # Rotate for next scan
-            if scan_step < 11:
-                dp = tello_command(tello, ("cw", 30))
+            if scan_step < 12:
+                dp = tello_command(tello, ("cw", 29))
                 drone_wpose_ct += dp
         
         # Average unknown tag positions
@@ -447,10 +448,21 @@ def main():
             if unknown_tags[tag_id]:
                 avg_pos = np.mean(unknown_tags[tag_id], axis=0)
                 print(f"Unknown tag {tag_id} average position: {avg_pos}")
+
+         # Calculate errors for known tags
+        print("\n=== Error Analysis ===")
+        # error200 = sqrt(np.sum((np.array([1.05, 0]) - np.mean(unknown_tags[200], axis=0))**2))
+        error200 = np.linalg.norm(np.array([1.05, 0]) - np.mean(unknown_tags.get(200, [[0, 0]]), axis=0))
+        print(f"Error for tag 200: {error200:.3f}m")
+        error201 = np.linalg.norm(np.array([1.55, 1.07]) - np.mean(unknown_tags.get(201, [[0, 0]]), axis=0))
+        print(f"Error for tag 201: {error201:.3f}m")
+        error202 = np.linalg.norm(np.array([-1.5, 2.08]) - np.mean(unknown_tags.get(202, [[0, 0]]), axis=0))
+        print(f"Error for tag 202: {error202:.3f}m")
+        #tello_command(tello, ("cw", 30))
         
         # Phase 4: Navigate to Landing Spot
         print("Phase 4: Navigate to Landing Spot")
-        landing_spot = (0.25, 0.25)  # Default landing spot if not detected
+        landing_spot = (0.10, 0.10)  # Default landing spot if not detected
         if landing_spot:
             current_pos = drone_wpose_kf[:2].flatten() if drone_wpose_kf is not None else drone_wpose_at
             target_pos = np.array(landing_spot)
