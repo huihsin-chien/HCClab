@@ -111,19 +111,20 @@ def detect_apriltag(frame_read, at_detector, camera_params, tag_size):
     return tags_info
 
 def recognize_professor(frame): # TODO 
-    """
-    Recognize professor from the current frame
-    Returns: professor_name (string) or None if not recognized
-    """
-    # This function should be implemented based on your trained model
-    # For now, returning a placeholder
-    try:
-        # Call your professor recognition function here
-        result = professor_recognition.predict(frame)
-        return result
-    except:
-        print("Professor recognition not implemented yet")
-        return None
+    pass 
+    # """
+    # Recognize professor from the current frame
+    # Returns: professor_name (string) or None if not recognized
+    # """
+    # # This function should be implemented based on your trained model
+    # # For now, returning a placeholder
+    # try:
+    #     # Call your professor recognition function here
+    #     result = professor_recognition.predict(frame)
+    #     return result
+    # except:
+    #     print("Professor recognition not implemented yet")
+    #     return None
 
 def tello_command(tello, movement_request):
     """Execute movement command and return displacement"""
@@ -282,8 +283,8 @@ def main():
         return
     
     # Start stream display thread
-    stream_thread = threading.Thread(target=show_stream, args=(frame_read,), daemon=True)
-    stream_thread.start()
+    # stream_thread = threading.Thread(target=show_stream, args=(frame_read,), daemon=True)
+    # stream_thread.start()
     
     # Take off
     print("Taking off...")
@@ -301,9 +302,10 @@ def main():
     unknown_tags = {}  # Store unknown tag positions
     professor_detected = None
     landing_spot = None
+    tello.move_up(50)
     
     try:
-        # Phase 1: Object Detection (Professor Recognition)
+        # Phase 1: Object Detection (Professor Recognition)``
         print("Phase 1: Professor Recognition")
         recognition_attempts = 0
         max_recognition_attempts = 20
@@ -338,7 +340,7 @@ def main():
         
         # Move forward to detect AprilTags
         # DEBUG
-        dp = tello_command(tello, ("forward", 100))
+        dp = tello_command(tello, ("forward", 200))
         drone_wpose_ct += dp
         
         # Find known AprilTag for localization
