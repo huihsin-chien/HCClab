@@ -325,7 +325,8 @@ def main():
     d_wposes_at = []  # AprilTag measurement trajectory
     d_wposes_kf = []  # Kalman filter trajectory
     detected_tag_id = None
-    unknown_tags = {}  # Store unknown tag positions
+    unknown_tags_at = {}  # Store unknown tag positions for april tags localization
+    unknown_tags_kf = {}  # Store unknown tag positions for kalman filter localization
     professor_detected = None
     landing_spot = None
     drone_yaw = 0.0  # Track drone's orientation
@@ -417,13 +418,14 @@ def main():
                     
                     if tag_id not in final_setting.ar_word.keys():
                         # Unknown tag found
-                        if tag_id not in unknown_tags:
-                            unknown_tags[tag_id] = []
+                        if tag_id not in unknown_tags_at:
+                            unknown_tags_at[tag_id] = []
                         
                         # Calculate unknown tag's world position
                         # tag_world_pos = drone_wpose_at + np.array([tag_info['pose'][0], tag_info['pose'][2]])
                         tag_world_pos = np.array(drone_wpose_kf[:2]).flatten() + np.array([tag_info['pose'][0], tag_info['pose'][2]]) # try to use kalman filter position
-                        unknown_tags[tag_id].append(tag_world_pos)
+                        unknown_tags_at[tag_id].append(tag_world_pos)
+                        unknown_tags_kf[tag_id] = unknown_tags_at[tag_id].copy()  # Store for Kalman filter
                         print(f"Unknown tag {tag_id} detected at: {tag_world_pos}")
                     
                     else:
@@ -444,10 +446,11 @@ def main():
                 drone_wpose_ct += dp
         
         # Average unknown tag positions
-        for tag_id in unknown_tags:
-            if unknown_tags[tag_id]:
-                avg_pos = np.mean(unknown_tags[tag_id], axis=0)
-                print(f"Unknown tag {tag_id} average position: {avg_pos}")
+        for tag_id in unknown_tags_at:
+            if unknown_tags_at[tag_id]:
+                avg_pos = np.mean(unknown_tags_at[tag_id], axis=0)
+                avg_pos_kf = np.mean(unknown_tags_kf[tag_id], axis=0) 
+                print(f"Unknown tag {tag_id} average position for april tag: {avg_pos}, Kalman filter: {avg_pos_kf}")
         
         # Phase 4: Navigate to Landing Spot
         print("Phase 4: Navigate to Landing Spot")
@@ -485,20 +488,30 @@ def main():
         print("\n=== Competition Results ===")
         print(f"Professor detected: {professor_detected}")
         print(f"Landing spot: {landing_spot}")
-        print(f"Unknown tags found: {list(unknown_tags.keys())}")
+        print(f"Unknown tags found: {list(unknown_tags_at.keys())}")
         print(f"Final position: {final_pos if 'final_pos' in locals() else 'Unknown'}")
         print(f"Total time: {total_time:.2f}s")
         # print("error unknown tags positions:")
 
         # Calculate errors for known tags
-        print("\n=== Error Analysis ===")
-        # error200 = sqrt(np.sum((np.array([1.05, 0]) - np.mean(unknown_tags[200], axis=0))**2))
-        error200 = np.linalg.norm(np.array([1.05, 0]) - np.mean(unknown_tags.get(200, [[0, 0]]), axis=0))
+        print("\n=== Error Analysis: April tag ===")
+        # error200 = sqrt(np.sum((np.array([1.05, 0]) - np.mean(unknown_tags_at[200], axis=0))**2))
+        error200 = np.linalg.norm(np.array([1.05, 0]) - np.mean(unknown_tags_at.get(200, [[0, 0]]), axis=0))
         print(f"Error for tag 200: {error200:.3f}m")
-        error201 = np.linalg.norm(np.array([1.55, 1.07]) - np.mean(unknown_tags.get(201, [[0, 0]]), axis=0))
+        error201 = np.linalg.norm(np.array([1.55, 1.07]) - np.mean(unknown_tags_at.get(201, [[0, 0]]), axis=0))
         print(f"Error for tag 201: {error201:.3f}m")
-        error202 = np.linalg.norm(np.array([-1.5, 2.08]) - np.mean(unknown_tags.get(202, [[0, 0]]), axis=0))
+        error202 = np.linalg.norm(np.array([-1.5, 2.08]) - np.mean(unknown_tags_at.get(202, [[0, 0]]), axis=0))
         print(f"Error for tag 202: {error202:.3f}m")
+
+        print("\n=== Error Analysis: Kalman Filter ===")
+        # error200_kf = sqrt(np.sum((np.array([1.05, 0]) - np.mean(unknown_tags_kf[200], axis=0))**2))
+        error200_kf = np.linalg.norm(np.array([1.05, 0]) - np.mean(unknown_tags_kf.get(200, [[0, 0]]), axis=0))
+        print(f"Error for tag 200: {error200_kf:.3f}m")
+        error201_kf = np.linalg.norm(np.array([1.55, 1.07]) - np.mean(unknown_tags_kf.get(201, [[0, 0]]), axis=0))
+        print(f"Error for tag 201: {error201_kf:.3f}m")
+        error202_kf = np.linalg.norm(np.array([-1.5, 2.08]) - np.mean(unknown_tags_kf.get(202, [[0, 0]]), axis=0))
+        print(f"Error for tag 202: {error202_kf:.3f}m")
+        
 
         
     except Exception as e:
