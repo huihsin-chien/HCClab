@@ -427,6 +427,7 @@ def main():
         
         # Phase 4: Navigate to Landing Spot
         print("Phase 4: Navigate to Landing Spot")
+        landing_spot = (0.5, 2.0)
         if landing_spot:
             current_pos = drone_wpose_kf[:2].flatten() if drone_wpose_kf is not None else drone_wpose_at
             target_pos = np.array(landing_spot)
