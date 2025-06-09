@@ -4,7 +4,12 @@ from djitellopy import Tello
 from pupil_apriltags import Detector
 import cv2
 import matplotlib.pyplot as plt
-import final_setting # Import the settings from final_setting.py
+import threading
+import final_setting  # Import the settings from final_setting.py
+
+# You'll need to create this file with your professor images and model
+# import professor_recognition  # Your image recognition module
+
 class KalmanFilter:
     def __init__(self):
         """
@@ -20,7 +25,6 @@ class KalmanFilter:
         mu : state estimate (n x 1)
         Sigma : state covariance (n x n)
         """
-        # TODO_1
         # State dimension: [x, y, z] = 3
         n = 3  # state dimension
         m = 3  # control input dimension
@@ -34,7 +38,6 @@ class KalmanFilter:
         self.Sigma = np.eye(n) * 1.0
 
     def predict(self, u):
-        # TODO_2
         """
         Prediction step of Kalman Filter
         Args:
@@ -47,7 +50,6 @@ class KalmanFilter:
         self.Sigma = self.A @ self.Sigma @ self.A.T + self.R
 
     def update(self, z):
-        # TODO_3
         """
         Update step of Kalman Filter
         Args:
@@ -76,10 +78,14 @@ class KalmanFilter:
     def get_state(self):
         return self.mu, self.Sigma
 
-def Detect_AprilTag(frame_read):
-    print("detecting april tag")
+def detect_apriltag(frame_read, at_detector, camera_params, tag_size):
+    """Detect AprilTags in the current frame"""
+    print("Detecting AprilTag...")
     tags_info = []
     frame = frame_read.frame
+    if frame is None:
+        return tags_info
+        
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
     # Detect tags
@@ -100,50 +106,124 @@ def Detect_AprilTag(frame_read):
 
     # Show live feed
     cv2.imshow("Tello Stream with AprilTag", frame)
-    key = cv2.waitKey(1)
-    # 可根據需要決定是否要用 key 來中斷
+    cv2.waitKey(1)
 
     return tags_info
-    
-def tello_command(movement_request):
-    dp = [0.0, 0.0]
-    cmd, value = movement_request
-    if cmd == "forward":
-        tello.move_forward(value)
-        dp = [0.0, value]
-    elif cmd == "back":
-        tello.move_back(value)
-        dp = [0.0, -value]
-    elif cmd == "right":
-        tello.move_right(value)
-        dp = [value, 0.0]
-    elif cmd == "left":
-        tello.move_left(value)
-        dp = [-value, 0.0]
-    elif cmd == "up":
-        tello.move_up(value)
-        # dp = [0.0, 0.0, value]
-    elif cmd == "down":
-        tello.move_down(value)
-        # dp = [0.0, 0.0, -value]
-    elif cmd == "cw":
-        tello.rotate_clockwise(value)
-        dp = [0.0, 0.0]
-    elif cmd == "ccw":
-        tello.rotate_counter_clockwise(value)
-        dp = [0.0, 0.0]
-    time.sleep(1)
 
-    return np.array(dp) * 0.01
+def recognize_professor(frame): # TODO 
+    """
+    Recognize professor from the current frame
+    Returns: professor_name (string) or None if not recognized
+    """
+    # This function should be implemented based on your trained model
+    # For now, returning a placeholder
+    try:
+        # Call your professor recognition function here
+        result = professor_recognition.predict(frame)
+        return result
+    except:
+        print("Professor recognition not implemented yet")
+        return None
+
+def tello_command(tello, movement_request):
+    """Execute movement command and return displacement"""
+    dp = np.array([0.0, 0.0, 0.0])
+    cmd, value = movement_request
+    
+    try:
+        if cmd == "forward":
+            tello.move_forward(value)
+            dp = np.array([0.0, value * 0.01, 0.0])  # Convert cm to m
+        elif cmd == "back":
+            tello.move_back(value)
+            dp = np.array([0.0, -value * 0.01, 0.0])
+        elif cmd == "right":
+            tello.move_right(value)
+            dp = np.array([value * 0.01, 0.0, 0.0])
+        elif cmd == "left":
+            tello.move_left(value)
+            dp = np.array([-value * 0.01, 0.0, 0.0])
+        elif cmd == "up":
+            tello.move_up(value)
+            dp = np.array([0.0, 0.0, value * 0.01])
+        elif cmd == "down":
+            tello.move_down(value)
+            dp = np.array([0.0, 0.0, -value * 0.01])
+        elif cmd == "cw":
+            tello.rotate_clockwise(value)
+            dp = np.array([0.0, 0.0, 0.0])
+        elif cmd == "ccw":
+            tello.rotate_counter_clockwise(value)
+            dp = np.array([0.0, 0.0, 0.0])
+        
+        time.sleep(1.5)  # Wait for movement to complete
+    except Exception as e:
+        print(f"Movement command failed: {e}")
+        
+    return dp
+
+def calculate_drone_position(known_tag_id, tag_pose, ar_word):
+    """Calculate drone position based on known AprilTag"""
+    if known_tag_id in ar_word:
+        # Convert camera coordinates to world coordinates
+        drone_x = ar_word[known_tag_id][0] - tag_pose[0]
+        drone_y = ar_word[known_tag_id][1] - tag_pose[2]
+        return np.array([drone_x, drone_y])
+    return None
+
+def move_to_target(tello, current_pos, target_pos, kf, tolerance=0.1):
+    """Move drone from current position to target position"""
+    print(f"Moving from {current_pos} to {target_pos}")
+    
+    dx = target_pos[0] - current_pos[0]
+    dy = target_pos[1] - current_pos[1]
+    distance = np.sqrt(dx**2 + dy**2)
+    
+    movements = []
+    
+    # Move in X direction
+    if abs(dx) > tolerance:
+        if dx > 0:
+            move_cm = int(abs(dx) * 100)  # Convert to cm
+            movements.append(("right", min(move_cm, 500)))  # Limit max movement
+        else:
+            move_cm = int(abs(dx) * 100)
+            movements.append(("left", min(move_cm, 500)))
+    
+    # Move in Y direction
+    if abs(dy) > tolerance:
+        if dy > 0:
+            move_cm = int(abs(dy) * 100)
+            movements.append(("forward", min(move_cm, 500)))
+        else:
+            move_cm = int(abs(dy) * 100)
+            movements.append(("back", min(move_cm, 500)))
+    
+    # Execute movements
+    current_estimated_pos = current_pos.copy()
+    for movement in movements:
+        dp = tello_command(tello, movement)
+        current_estimated_pos += dp[:2]  # Update estimated position
+        
+        # Update Kalman filter
+        kf.predict(np.expand_dims(dp, axis=1))
+    
+    return current_estimated_pos
 
 def plot_trajectory(control_poses, tag_pose, kalmanfilter_pose):
+    """Plot trajectory comparison"""
+    if not control_poses or not tag_pose or not kalmanfilter_pose:
+        print("No trajectory data to plot")
+        return
+        
     poses_ct = np.array(control_poses)
     poses_at = np.array(tag_pose)
     poses_kf = np.array(kalmanfilter_pose)
-    plt.figure(figsize=(8, 6))
-    plt.plot(poses_ct[:, 0], poses_ct[:, 1], 'ko--', label='Motion Model')
-    plt.plot(poses_at[:, 0], poses_at[:, 1], 'rx-', label='AprilTag')
-    plt.plot(poses_kf[:, 0], poses_kf[:, 1], 'b^-', label='Kalman Filter')
+    
+    plt.figure(figsize=(10, 8))
+    plt.plot(poses_ct[:, 0], poses_ct[:, 1], 'ko--', label='Motion Model', linewidth=2)
+    plt.plot(poses_at[:, 0], poses_at[:, 1], 'rx-', label='AprilTag', linewidth=2)
+    plt.plot(poses_kf[:, 0], poses_kf[:, 1], 'b^-', label='Kalman Filter', linewidth=2)
     plt.title("2D Trajectory Tracking")
     plt.xlabel("X Position (m)")
     plt.ylabel("Y Position (m)")
@@ -151,125 +231,243 @@ def plot_trajectory(control_poses, tag_pose, kalmanfilter_pose):
     plt.grid(True)
     plt.axis("equal")
     plt.show()
+
+def show_stream(frame_read):
+    """Show video stream in separate thread"""
+    while True:
+        frame = frame_read.frame
+        if frame is not None:
+            cv2.imshow("Tello Stream", frame)
+            if cv2.waitKey(1) & 0xFF == ord('q'):
+                break
+    cv2.destroyAllWindows()
+
+def main():
+    # Competition start time
+    start_time = time.time()
     
-
-if __name__ == '__main__':
-    # movement_sequence = [
-    # ("forward", 30),
-    # ("forward", 20),
-    # ("forward", 20),
-    # ("left", 20),
-    # ("forward", 30),
-    # ("right", 20),
-    # ("forward", 30),
-    # ("right", 20),
-    # ("back", 30),
-    # ("back", 20),
-    # ("back", 20)
-    # ]
-
-    # Camera calibration 
-    #camera_params = [911.0081620140941, 909.7331518528662, 493.74409668840053, 360.48512415375063]  # fx, fy, cx, cy?? # fx, fy, cx, cy UAV01
-    camera_params = [917.0, 917.0, 480.0, 360.0]
-    tag_size = 0.166  # 5cm tag size - adjust based on your actual tag?? # meters
-
+    # Camera calibration parameters
+    camera_params = [917.0, 917.0, 480.0, 360.0]  # fx, fy, cx, cy
+    tag_size = 0.166  # Tag size in meters
+    
     # AprilTag detector
-    # at_word = np.array([0.1, 3.0, 0.0]) # AprilTag在世界座標的真實位置（x, y, z）。
     at_detector = Detector(families='tag36h11')
-
+    
     # Kalman Filter
     KF = KalmanFilter()
-
-    # Initialize
+    
+    # Initialize Tello
     tello = Tello()
     tello.connect()
     print(f"Battery: {tello.get_battery()}%")
-
+    
+    if tello.get_battery() < 20:
+        print("Battery too low! Please charge the drone.")
+        return
+    
+    # Start video stream
     tello.streamon()
     frame_read = tello.get_frame_read()
-    frame = None
-    while frame is None:
-        frame = frame_read.frame
-    # time.sleep(3)
-
-    tello.takeoff()
-    time.sleep(2)
-
-    drone_wpose_ct = np.array([0.0, 0.0]) # 無人機根據運動模型推算的世界座標
-    d_wposes_ct = [] # 運動模型軌跡列表。
-    d_wposes_at = [] # AprilTag量測軌跡列表
-    d_wposes_kf = [] # 卡爾曼濾波軌跡列表
-    detected_tag_id = None # 偵測到的 AprilTag id
-    landing_spot = None
-    unkown_tags = {} # 用來儲存未知的 tag id 與其位置
-
-    # 往前移動, 拍到 tag_id=0 的 AprilTag
-    dp = tello_command(("forward", 200))
-    drone_wpose_ct += dp # 更新無人機位置
-    # 如果偵測到的 aprit tag 
-
-    while detected_tag_id not in final_setting.ar_word.keys():
-        # at_pose, detected_tag_id = Detect_AprilTag(frame_read) # AprilTag偵測到的位置（相機座標）return value: (x, y, z),tag_id
-        tags_info = Detect_AprilTag(frame_read) # 偵測到的 AprilTag資訊
-        
-        if tags_info:
-            for i in tags_info:
-                if i['id'] in final_setting.ar_word.keys():
-                    detected_tag_id = i['id']
-                    at_pose = i['pose']
-    # 根據特定的 tag id, 計算 drone_wpose_at 的位置 
-    drone_wpose_at = [final_setting.ar_word[detected_tag_id][0] + at_detector.tag_size - at_pose[0], \
-                      final_setting.ar_word[detected_tag_id][1] - at_pose[2]] # AprilTag在世界座標的真實位置（x, y）
-    KF.predict(np.expand_dims(dp, axis=1)) # 卡爾曼濾波預測
-    drone_wpose_kf = KF.update(np.expand_dims(drone_wpose_at, axis=1)) # 卡爾曼濾波更新\
-
-    # scan around, find unknow tag
-    # unkown tags 可能跟已知的 ar_word 在同一畫面，也可能不在同一畫面。如果在不同畫面，那就用無人機本身的位置推算unknow tag的位置
-    # 使用當前畫面，根據畫面上已知的 tag 定位自己，再用自己的位置尋找並定位未知的 tag, 然後旋轉 60 度，再重複上述動作
-
-    for i in range(6):
-        # 偵測 AprilTag
-        tags_info = Detect_AprilTag(frame_read) # 偵測到的 AprilTag資訊
-        if tags_info:
-            for tag_info in tags_info:
-                if tag_info['id'] not in final_setting.ar_word.keys():
-                    # 如果偵測到未知的 tag, 則儲存其位置
-                    if tag_info['id'] not in unkown_tags:
-                        unkown_tags[tag_info['id']] = []
-                    unkown_tags[tag_info['id']].append(np.array(drone_wpose_at) + np.array(tag_info['pose'][:2]))
-                else:
-                    # 如果偵測到已知的 tag, 則更新無人機位置
-                    drone_wpose_at = [final_setting.ar_word[tag_info['id']][0] + at_detector.tag_size - tag_info['pose'][0], \
-                                      final_setting.ar_word[tag_info['id']][1] - tag_info['pose'][2]]
-                    drone_wpose_kf = KF.update(np.expand_dims(drone_wpose_at, axis=1)) # 卡爾曼濾波更新
-        tello.rotate_clockwise(60) # 旋轉 60 度
-        tags_info = Detect_AprilTag(frame_read) # 偵測到的 AprilTag資訊
-        if tags_info:
-            for tag_info in tags_info:
-                if tag_info['id'] in final_setting.ar_word.keys():
-                   drone_wpose_at = [final_setting.ar_word[tag_info['id']][0] + at_detector.tag_size - tag_info['pose'][0], \
-                                      final_setting.ar_word[tag_info['id']][1] - tag_info['pose'][2]]
-
-        d_wposes_ct.append(drone_wpose_ct.copy())
-        d_wposes_at.append(drone_wpose_at)
-        d_wposes_kf.append(drone_wpose_kf.flatten())
-
-
     
+    # Wait for video stream to start
+    frame = None
+    retry_count = 0
+    while frame is None and retry_count < 10:
+        frame = frame_read.frame
+        time.sleep(0.5)
+        retry_count += 1
+    
+    if frame is None:
+        print("Failed to get video stream")
+        return
+    
+    # Start stream display thread
+    stream_thread = threading.Thread(target=show_stream, args=(frame_read,), daemon=True)
+    stream_thread.start()
+    
+    # Take off
+    print("Taking off...")
 
+    tello.takeoff() # DEBUG
+    
+    time.sleep(3)
+    
+    # Competition variables
+    drone_wpose_ct = np.array([0.0, 0.0, 0.0])  # Control model position
+    d_wposes_ct = []  # Control model trajectory
+    d_wposes_at = []  # AprilTag measurement trajectory
+    d_wposes_kf = []  # Kalman filter trajectory
+    detected_tag_id = None
+    unknown_tags = {}  # Store unknown tag positions
+    professor_detected = None
+    landing_spot = None
+    
+    try:
+        # Phase 1: Object Detection (Professor Recognition)
+        print("Phase 1: Professor Recognition")
+        recognition_attempts = 0
+        max_recognition_attempts = 20
 
-
-    print(f"drone_wpose_ct: {drone_wpose_ct}")
-    print(f"drone_wpose_at: {drone_wpose_at}")
-    print(f"drone_wpose_kf: {drone_wpose_kf.flatten()}")
-    print(f"detected_tag_id: {detected_tag_id}")
-    print(f"unkown_tags: {unkown_tags}")
+        # debug 用，先預設教授名稱為 hh_shuai
+        professor_detected = 'hh_shuai'
+        while professor_detected is None and recognition_attempts < max_recognition_attempts:
+            frame = frame_read.frame
+            if frame is not None:
+                professor_detected = recognize_professor(frame)
+                if professor_detected:
+                    print(f"Professor detected: {professor_detected}")
+                    # Get corresponding landing spot
+                    if hasattr(final_setting, 'professor_landing_spots'):
+                        landing_spot = final_setting.professor_landing_spots.get(professor_detected)
+                    break
+            
+            # Move around to get better view
+            if recognition_attempts % 5 == 0:
+                dp = tello_command(tello, ("cw", 30))  # Rotate to get different angle
+                drone_wpose_ct += dp
+            
+            recognition_attempts += 1
+            time.sleep(0.5)
         
+        if professor_detected is None:
+            print("Failed to detect professor, using default landing spot")
+            landing_spot = [0, 0]  # Default position
+        
+        # Phase 2: AprilTag Detection and Position Estimation
+        print("Phase 2: AprilTag Detection")
+        
+        # Move forward to detect AprilTags
+        # DEBUG
+        dp = tello_command(tello, ("forward", 100))
+        drone_wpose_ct += dp
+        
+        # Find known AprilTag for localization
+        localization_found = False
+        search_attempts = 0
+        
+        while not localization_found and search_attempts < 12:  # 360 degrees / 30 degrees = 12
+            tags_info = detect_apriltag(frame_read, at_detector, camera_params, tag_size)
+            
+            if tags_info:
+                for tag_info in tags_info:
+                    if tag_info['id'] in final_setting.ar_word.keys():
+                        # Found known tag for localization
+                        detected_tag_id = tag_info['id']
+                        at_pose = tag_info['pose']
+                        drone_wpose_at = calculate_drone_position(detected_tag_id, at_pose, final_setting.ar_word)
+                        
+                        if drone_wpose_at is not None:
+                            # Update Kalman filter
+                            KF.predict(np.expand_dims(dp, axis=1))
+                            drone_wpose_kf = KF.update(np.expand_dims(np.append(drone_wpose_at, 0), axis=1))
+                            localization_found = True
+                            print(f"Localized using tag {detected_tag_id} at position: {drone_wpose_at}")
+                            break
+            
+            if not localization_found:
+                # Rotate to search for tags
+                dp = tello_command(tello, ("cw", 30))
+                drone_wpose_ct += dp
+                search_attempts += 1
+        
+        if not localization_found:
+            print("Failed to localize using AprilTags")
+            drone_wpose_at = drone_wpose_ct[:2]  # Use control model as fallback
+        
+        # Phase 3: Scan for Unknown AprilTags
+        print("Phase 3: Scanning for Unknown AprilTags")
+        
+        for scan_step in range(12):  # 360-degree scan
+            tags_info = detect_apriltag(frame_read, at_detector, camera_params, tag_size)
+            
+            if tags_info:
+                for tag_info in tags_info:
+                    tag_id = tag_info['id']
+                    
+                    if tag_id not in final_setting.ar_word.keys():
+                        # Unknown tag found
+                        if tag_id not in unknown_tags:
+                            unknown_tags[tag_id] = []
+                        
+                        # Calculate unknown tag's world position
+                        tag_world_pos = drone_wpose_at + np.array([tag_info['pose'][0], tag_info['pose'][2]])
+                        unknown_tags[tag_id].append(tag_world_pos)
+                        print(f"Unknown tag {tag_id} detected at: {tag_world_pos}")
+                    
+                    else:
+                        # Update localization with known tag
+                        drone_wpose_at = calculate_drone_position(tag_id, tag_info['pose'], final_setting.ar_word)
+                        if drone_wpose_at is not None:
+                            KF.predict(np.zeros((3, 1)))
+                            drone_wpose_kf = KF.update(np.expand_dims(np.append(drone_wpose_at, 0), axis=1))
+            
+            # Record trajectory
+            d_wposes_ct.append(drone_wpose_ct[:2].copy())
+            d_wposes_at.append(drone_wpose_at.copy() if drone_wpose_at is not None else [0, 0])
+            d_wposes_kf.append(drone_wpose_kf[:2].flatten() if drone_wpose_kf is not None else [0, 0])
+            
+            # Rotate for next scan
+            if scan_step < 11:
+                dp = tello_command(tello, ("cw", 30))
+                drone_wpose_ct += dp
+        
+        # Average unknown tag positions
+        for tag_id in unknown_tags:
+            if unknown_tags[tag_id]:
+                avg_pos = np.mean(unknown_tags[tag_id], axis=0)
+                print(f"Unknown tag {tag_id} average position: {avg_pos}")
+        
+        # Phase 4: Navigate to Landing Spot
+        print("Phase 4: Navigate to Landing Spot")
+        if landing_spot:
+            current_pos = drone_wpose_kf[:2].flatten() if drone_wpose_kf is not None else drone_wpose_at
+            target_pos = np.array(landing_spot)
+            
+            # Move to target position
+            final_pos = move_to_target(tello, current_pos, target_pos, KF)
+            
+            # Fine adjustment for landing accuracy
+            print("Fine adjustment for landing...")
+            time.sleep(1)
+            
+            # Final position check
+            tags_info = detect_apriltag(frame_read, at_detector, camera_params, tag_size)
+            if tags_info:
+                for tag_info in tags_info:
+                    if tag_info['id'] in final_setting.ar_word.keys():
+                        refined_pos = calculate_drone_position(tag_info['id'], tag_info['pose'], final_setting.ar_word)
+                        if refined_pos is not None:
+                            error = np.linalg.norm(refined_pos - target_pos)
+                            print(f"Landing accuracy: {error:.3f}m")
+        
+        # Phase 5: Land
+        print("Phase 5: Landing")
+        tello.land()
+        
+        # Calculate total time
+        total_time = time.time() - start_time
+        print(f"Total competition time: {total_time:.2f} seconds")
+        
+        # Print results
+        print("\n=== Competition Results ===")
+        print(f"Professor detected: {professor_detected}")
+        print(f"Landing spot: {landing_spot}")
+        print(f"Unknown tags found: {list(unknown_tags.keys())}")
+        print(f"Final position: {final_pos if 'final_pos' in locals() else 'Unknown'}")
+        print(f"Total time: {total_time:.2f}s")
+        
+    except Exception as e:
+        print(f"Error during competition: {e}")
+        tello.land()
+    
+    finally:
+        # Cleanup
+        tello.streamoff()
+        cv2.destroyAllWindows()
+        
+        # Plot trajectory if data available
+        if d_wposes_ct and d_wposes_at and d_wposes_kf:
+            plot_trajectory(d_wposes_ct, d_wposes_at, d_wposes_kf)
 
-    tello.land()
-    tello.streamoff()
-    cv2.destroyAllWindows()
-
-# === Plot 2D trajectory ===
-    plot_trajectory(d_wposes_ct, d_wposes_at, d_wposes_kf)
-
+if __name__ == '__main__':
+    main()
