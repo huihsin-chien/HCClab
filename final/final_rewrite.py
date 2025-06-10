@@ -152,7 +152,7 @@ def main():
     time.sleep(3)
     tello.move_up(50)
     # tello_command(tello, ("move_forward", 100))  
-    tello.move_forward(100)
+    tello.move_forward(80)
     #------------end of take off----------------
 
     try:
@@ -205,9 +205,11 @@ def main():
                 # 取十次平均
                 tags_info_avg = average_apriltag_detection(frame_read, at_detector, camera_params, tag_size, num=10)
                 known_tag = None
+                print(f"tags_info_avg: {tags_info_avg}")
                 for tag in tags_info_avg:
                     if tag["id"] in final_rewrite_setting.ar_word:
                         known_tag = tag
+                        print(f"Known tag found: {known_tag}")
                         break
             
 
@@ -216,7 +218,7 @@ def main():
                         # Calculate position based on wall
                         if wall == 'wall_1':
                             if known_tag is not None:
-                                x = -1 * (tag['pose'][0] - known_tag['pose'][0])
+                                x = -1 * (tag['pose'][0] - known_tag['pose'][0]) + final_rewrite_setting.ar_word[known_tag["id"]][0]
                             else:
                                 x = -1 * tag['pose'][0]  # Use x from pose
                             y = 0.0  # Fixed y for wall 1
@@ -226,14 +228,14 @@ def main():
                             # y = tag['pose'][1]  # Use y from pose
                             # wall 2 的  y 座標為 已知tag  再加上 -1 * tag['pose'][0]
                             if known_tag is not None:
-                                y = -1 * (tag['pose'][0] - known_tag['pose'][0])
+                                y =  -1 * (tag['pose'][0] - known_tag['pose'][0]) + final_rewrite_setting.ar_word[known_tag["id"]][1]
                             else:
                                 y = tag['pose'][0]  
                                 print("Warning: No known tag found for wall 2, using tag pose directly.")
                         elif wall == 'wall_3':
                             # x = tag['pose'][0]  # Use x from pose
                             if known_tag is not None:
-                                x = -1 * (tag['pose'][0] - known_tag['pose'][0])
+                                x = -1 * (tag['pose'][0] - known_tag['pose'][0]) + final_rewrite_setting.ar_word[known_tag["id"]][0]
                             else:
                                 x = tag['pose'][0] * -1  
                                 print("Warning: No known tag found for wall 3, using tag pose directly.")
@@ -241,7 +243,7 @@ def main():
                         elif wall == 'wall_4':
                             x = -1.5  # Fixed x for wall 4
                             if known_tag is not None:
-                                y = (tag['pose'][0] - known_tag['pose'][0])
+                                y = (tag['pose'][0] - known_tag['pose'][0]) + final_rewrite_setting.ar_word[known_tag["id"]][1]
                             else:
                                 # y = tag['pose'][1] * -1  
                                 y = tag['pose'][0] * -1  
@@ -281,6 +283,9 @@ def main():
         
 
 
+# TODO
+# 測試 wall 3 辨識正確
+# 調整：若 tello 視窗內沒有辦法把
 
 
 if __name__ == '__main__':
