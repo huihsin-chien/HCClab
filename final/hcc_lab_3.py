@@ -356,9 +356,8 @@ def main():
             
             # Move around to get better view
             if recognition_attempts % 5 == 0:
-                dp, dyaw = tello_command(tello, ("cw", 30))  # Rotate to get different angle
+                dp= tello_command(tello, ("cw", 30))  # Rotate to get different angle
                 drone_wpose_ct += dp
-                drone_yaw += dyaw
             
             recognition_attempts += 1
             time.sleep(0.5)
@@ -387,21 +386,21 @@ def main():
                         # Found known tag for localization
                         detected_tag_id = tag_info['id']
                         at_pose = tag_info['pose']
-                        drone_wpose_at = calculate_drone_position(detected_tag_id, at_pose, final_setting.ar_word, drone_yaw)
+                        drone_wpose_at = calculate_drone_position(detected_tag_id, at_pose, final_setting.ar_word)
                         
                         if drone_wpose_at is not None:
                             # Update Kalman filter
                             KF.predict(np.expand_dims(dp, axis=1))
                             drone_wpose_kf = KF.update(np.expand_dims(np.append(drone_wpose_at, 0), axis=1))
                             localization_found = True
-                            print(f"Localized using tag {detected_tag_id} at drone position: {drone_wpose_at}, yaw: {drone_yaw}°")
+                            print(f"Localized using tag {detected_tag_id} at drone position: {drone_wpose_at}")
                             break
             
             if not localization_found:
                 # Rotate to search for tags
-                dp, dyaw = tello_command(tello, ("cw", 30))
+                dp= tello_command(tello, ("cw", 30))
                 drone_wpose_ct += dp
-                drone_yaw += dyaw
+               
                 search_attempts += 1
         
         if not localization_found:
