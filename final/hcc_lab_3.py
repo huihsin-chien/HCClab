@@ -278,7 +278,7 @@ def main():
     start_time = time.time()
     
     # Camera calibration parameters
-    camera_params = [917.0, 917.0, 480.0, 360.0]  # fx, fy, cx, cy
+    camera_params = [1.84825711e+03, 1.85066209e+03, 1.29929007e+03, 9.04726581e+02]  # fx, fy, cx, cy
     tag_size = 0.166  # Tag size in meters
     
     # AprilTag detector
@@ -321,6 +321,8 @@ def main():
     
     # Competition variables
     drone_wpose_ct = np.array([0.0, 0.0, 0.0])  # Control model position
+    drone_wpose_at = np.array([0.0, 0.0, 0.0])  # AprilTag position
+    drone_wpose_kf = np.array([0.0, 0.0, 0.0])  # Kalman filter position
     d_wposes_ct = []  # Control model trajectory
     d_wposes_at = []  # AprilTag measurement trajectory
     d_wposes_kf = []  # Kalman filter trajectory
@@ -420,10 +422,15 @@ def main():
                         # Unknown tag found
                         if tag_id not in unknown_tags_at:
                             unknown_tags_at[tag_id] = []
+                            unknown_tags_kf[tag_id] = []  # Initialize for Kalman filter
                         
                         # Calculate unknown tag's world position
-                        tag_world_pos = drone_wpose_at + np.array([tag_info['pose'][0], tag_info['pose'][2]])
-                        tag_world_pos_kf = np.array(drone_wpose_kf[:2]).flatten() + np.array([tag_info['pose'][0], tag_info['pose'][2]]) # try to use kalman filter position
+                        tag_world_pos = drone_wpose_at + np.array([tag_info['pose'][0], tag_info['pose'][2]]) 
+                        if drone_wpose_kf is not None:
+                            tag_world_pos_kf = np.array(drone_wpose_kf[:2]).flatten() + np.array([tag_info['pose'][0], tag_info['pose'][2]])
+                        else:
+                            tag_world_pos_kf = tag_world_pos  # fallback
+
                         unknown_tags_at[tag_id].append(tag_world_pos)
                         unknown_tags_kf[tag_id].append(tag_world_pos_kf) # Store for Kalman filter
                         print(f"Unknown tag {tag_id} detected at: {tag_world_pos}")
@@ -453,7 +460,7 @@ def main():
         
         # Phase 4: Navigate to Landing Spot
         print("Phase 4: Navigate to Landing Spot")
-        landing_spot = (0.10, 0.08)  # Default landing spot if not detected
+        landing_spot = (0, 0)  # Default landing spot if not detected
         if landing_spot:
             current_pos = drone_wpose_kf[:2].flatten() if drone_wpose_kf is not None else drone_wpose_at
             target_pos = np.array(landing_spot)
@@ -515,6 +522,8 @@ def main():
         
     except Exception as e:
         print(f"Error during competition: {e}")
+        import traceback
+        traceback.print_exc()
         tello.land()
     
     finally:
