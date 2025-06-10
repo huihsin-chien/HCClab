@@ -167,26 +167,13 @@ def tello_command(tello, movement_request):
         
     return dp
 
-def calculate_drone_position(known_tag_id, tag_pose, ar_word, drone_yaw=0):
+def calculate_drone_position(known_tag_id, tag_pose, ar_word):
     """Calculate drone position based on known AprilTag"""
     if known_tag_id in ar_word:
-        # Tag position in camera frame (x: right, y: down, z: forward)
-        # Convert to world frame considering drone's orientation
-        cos_yaw = np.cos(np.radians(drone_yaw))
-        sin_yaw = np.sin(np.radians(drone_yaw))
-        
-        # Camera to world transformation
-        # Camera: x=right, z=forward -> World: x=right, y=forward
-        camera_x = tag_pose[0]  # right in camera frame
-        camera_z = tag_pose[2]  # forward in camera frame
-        
-        # Transform to world coordinates considering drone rotation
-        world_offset_x = cos_yaw * camera_x + sin_yaw * camera_z
-        world_offset_y = -sin_yaw * camera_x + cos_yaw * camera_z
         
         # Drone position = Tag world position - offset
-        drone_x = ar_word[known_tag_id][0] - world_offset_x
-        drone_y = ar_word[known_tag_id][1] - world_offset_y
+        drone_x = ar_word[known_tag_id][0] - tag_pose[0]
+        drone_y = ar_word[known_tag_id][1] - tag_pose[2]
         
         return np.array([drone_x, drone_y])
     return None
@@ -386,14 +373,15 @@ def main():
                         # Found known tag for localization
                         detected_tag_id = tag_info['id']
                         at_pose = tag_info['pose']
+                        print(f"Detected known tag {detected_tag_id} at pose: {at_pose}")
                         drone_wpose_at = calculate_drone_position(detected_tag_id, at_pose, final_setting.ar_word)
-                        
+                        print(f"drone_wpose_at: {drone_wpose_at}")
                         if drone_wpose_at is not None:
                             # Update Kalman filter
                             KF.predict(np.expand_dims(dp, axis=1))
                             drone_wpose_kf = KF.update(np.expand_dims(np.append(drone_wpose_at, 0), axis=1))
                             localization_found = True
-                            print(f"Localized using tag {detected_tag_id} at drone position: {drone_wpose_at}")
+                            print(f"drone_wpose_kf: {drone_wpose_kf}")
                             break
             
             if not localization_found:
@@ -437,9 +425,12 @@ def main():
                     else:
                         # Update localization with known tag
                         drone_wpose_at = calculate_drone_position(tag_id, tag_info['pose'], final_setting.ar_word)
+                        print(f"Known tag {tag_id}, drone_wpose_at: {drone_wpose_at}")
+                    
                         if drone_wpose_at is not None:
                             KF.predict(np.zeros((3, 1)))
                             drone_wpose_kf = KF.update(np.expand_dims(np.append(drone_wpose_at, 0), axis=1))
+                            print(f"Updated drone_wpose_kf: {drone_wpose_kf}")
             
             # Record trajectory
             d_wposes_ct.append(drone_wpose_ct[:2].copy())
