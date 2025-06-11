@@ -7,6 +7,13 @@ import os
 import final_rewrite_setting as frs  # exposes ar_word, professor_landing_spots, unkonwn_tags, real_unknown_tags
 from ultralytics import YOLO
 
+WALL_1_BACK = 150
+WALL_2_BACK = 130
+WALL_3_BACK = 80 #70 - 100
+WALL_4_BACK = 130
+
+
+
 ###########################
 # === Global Parameters ===
 ###########################
@@ -22,11 +29,6 @@ CAMERA_MATRIX = np.array([[CAMERA_PARAMS[0], 0, CAMERA_PARAMS[2]],
                           [0, 0, 1]], dtype=np.float32)
 TAG_SIZE = 0.166  # metres
 
-
-WALL_1_BACK = 150
-WALL_2_BACK = 130
-WALL_3_BACK = 80 #80 - 100
-WALL_4_BACK = 130
 
 
 def tello_command(tello: Tello, movement: tuple[str, int]) -> np.ndarray:
