@@ -55,14 +55,15 @@ def map_unknown_tags(tello: Tello, frame_read, detector: Detector):
         print(f"[Map] {wall} – expected {expected}")
         if not expected:
             fu.tello_command(tello, ("ccw", 90)); continue
+            print(f"[Map] {wall} – no tags to map, skipping")
         # if wall != "wall_1":
         #     fu.tello_command(tello, ("back", 50))
         if wall == "wall_2":
-            fu.tello_command(tello, ("back", 120))
+            fu.tello_command(tello, ("back", 130))
         if wall == 'wall_3':
-            fu.tello_command(tello, ("back", 100))
+            fu.tello_command(tello, ("back", 80))
         if wall == 'wall_4':
-            fu.tello_command(tello, ("back", 120))
+            fu.tello_command(tello, ("back", 130))
 
 
 
@@ -86,21 +87,21 @@ def map_unknown_tags(tello: Tello, frame_read, detector: Detector):
 
         if wall == 'wall_1':
             fu.tello_command(tello, ("forward", 150))
-            fu.tello_command(tello, ("ccw", 90))  # Turn to face wall 2
             fu.align_tag(tello, frame_read, detector, fu.CAMERA_PARAMS, fu.TAG_SIZE, 100, front_distance=1.5)
+            fu.tello_command(tello, ("ccw", 90))  # Turn to face wall 2
         elif wall == 'wall_2':
-            fu.tello_command(tello, ("forward", 120))
+            fu.tello_command(tello, ("forward", 130))
             fu.tello_command(tello, ("cw", 90))  # Turn to face (0, 0)
             fu.align_tag(tello, frame_read, detector, fu.CAMERA_PARAMS, fu.TAG_SIZE, 100, front_distance=1.0)  # Align to tag 100, distance 100 cm
             fu.tello_command(tello, ("cw", 180)) # Turn to face wall 3
         elif wall == 'wall_3':
-            fu.tello_command(tello, ("forward", 100)) # Move back to center
+            fu.tello_command(tello, ("forward", 90)) # Move back to center
             fu.tello_command(tello, ("cw", 180)) # Turn to face wall_1
             fu.align_tag(tello, frame_read, detector, fu.CAMERA_PARAMS, fu.TAG_SIZE, 100, front_distance=1.5)  # Align to tag 100, distance 150 cm
             fu.tello_command(tello, ("cw", 90)) # Turn to face wall 4
         elif wall == 'wall_4':
             fu.tello_command(tello, ("ccw", 90)) # Turn to face wall 1
-            fu.tello_command(tello, ("forward", 120)) # Move back to center
+            fu.tello_command(tello, ("forward", 130)) # Move back to center
     return locations
 
 ########################################################
