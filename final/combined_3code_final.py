@@ -76,7 +76,7 @@ def average_apriltag_pose(frame_read, detector: Detector, samples: int = 10):
 # === Phase 1: recognise professor     ===
 #########################################
 
-def recognise_professor(tello: Tello, yolo_model: YOLO, attempts=20, consecutive=5, img_size=640):
+def recognise_professor(tello: Tello, yolo_model: YOLO, attempts=20, consecutive=4, img_size=640):
     fr = tello.get_frame_read(); last_lbl, streak = None, 0
     for i in range(attempts):
         frame = fr.frame
@@ -96,23 +96,27 @@ def recognise_professor(tello: Tello, yolo_model: YOLO, attempts=20, consecutive
         print(f"[Prof] attempt {i+1}: {lbl} ({streak}/{consecutive})")
         if streak >= consecutive:
             return lbl
-        time.sleep(0.4)
+        time.sleep(0.5)
     return None
 
 ########################################################
 # === Helper: camera pose from one tag              ===
 ########################################################
 
-def estimate_cam_from_tag(tag_corners):
-    obj_pts = np.array([[-TAG_SIZE/2, -TAG_SIZE/2, 0],
-                        [ TAG_SIZE/2, -TAG_SIZE/2, 0],
-                        [ TAG_SIZE/2,  TAG_SIZE/2, 0],
-                        [-TAG_SIZE/2,  TAG_SIZE/2, 0]], dtype=np.float32)
-    ok, rvec, tvec = cv2.solvePnP(obj_pts, np.array(tag_corners, np.float32), CAMERA_MATRIX, None, flags=cv2.SOLVEPNP_IPPE_SQUARE)
-    if not ok: return None
+def estimate_pose(tag_corners, tag_size=TAG_SIZE):
+    object_points = np.array([
+        [-tag_size/2, -tag_size/2, 0],
+        [ tag_size/2, -tag_size/2, 0],
+        [ tag_size/2,  tag_size/2, 0],
+        [-tag_size/2,  tag_size/2, 0]
+    ], dtype=np.float32)
+
+    image_points = np.array(tag_corners, dtype=np.float32)
+    success, rvec, tvec = cv2.solvePnP(object_points, image_points, CAMERA_MATRIX, distCoeffs=None)
+    if not success:
+        return None, None
     R, _ = cv2.Rodrigues(rvec)
-    cam_in_tag = -R.T @ tvec
-    return cam_in_tag.flatten()
+    return R, tvec
 
 ########################################################
 # === Phase 2: map unknown tags on 4 walls          ===
@@ -138,7 +142,7 @@ def map_unknown_tags(tello: Tello, frame_read, detector: Detector):
             elif wall == "wall_2":
                 x, y = 1.55, -(pose[0] - (ref_tag["pose"][0] if ref_tag else 0)) + (frs.ar_word.get(ref_tag["id"], [0,0])[1] if ref_tag else 0)
             elif wall == "wall_3":
-                x = -(pose[0] - (ref_tag["pose"][0] if ref_tag else 0)) + (frs.ar_word.get(ref_tag["id"], [0,0])[0] if ref_tag else 0)
+                x = (pose[0] - (ref_tag["pose"][0] if ref_tag else 0)) - (frs.ar_word.get(ref_tag["id"], [0,0])[0] if ref_tag else 0)
                 y = 3.0
             else:  # wall_4
                 x, y = -1.5, (pose[0] - (ref_tag["pose"][0] if ref_tag else 0)) + (frs.ar_word.get(ref_tag["id"], [0,0])[1] if ref_tag else 0)
@@ -153,36 +157,53 @@ def map_unknown_tags(tello: Tello, frame_read, detector: Detector):
 ########################################################
 
 def navigate_and_land(tello: Tello, frame_read, detector: Detector, target: np.ndarray):
-    def camera_world(tags):
-        pts = []
-        for det in tags:
-            tid = det.tag_id
-            if tid not in APRILTAG_WORLD_COORDS: continue
-            cam_in_tag = estimate_cam_from_tag(det.corners)
-            if cam_in_tag is None: continue
-            tag_w = APRILTAG_WORLD_COORDS[tid]
-            pts.append(np.array([-cam_in_tag[0] + tag_w[0], cam_in_tag[2] + tag_w[1], 0]))
-        return np.mean(pts, axis=0) if pts else None
-
     while True:
         frame = frame_read.frame
-        dets = detector.detect(cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY))
-        cam_pos = camera_world(dets)
-        if cam_pos is None:
-            print("[Land] no ref tag – hover")
-            time.sleep(0.5); continue
-        delta = target[:2] - cam_pos[:2]
-        dist = np.linalg.norm(delta)
-        print(f"[Land] Δ({delta[0]:.2f},{delta[1]:.2f}) d={dist:.2f}m")
-        if dist < 0.10:
-            tello.land(); return True
-        cmd_y = int(np.clip(delta[1]*100, -50, 50))
-        cmd_x = int(np.clip(delta[0]*100, -50, 50))
-        if abs(cmd_y) > 20: tello_command(tello, ("forward" if cmd_y>0 else "back", abs(cmd_y)))
-        elif abs(cmd_y) > 10: tello_command(tello, ("forward", 20))
-        if abs(cmd_x) > 20: tello_command(tello, ("right" if cmd_x>0 else "left", abs(cmd_x)))
-        elif abs(cmd_x) > 10: tello_command(tello, ("right", 20))
-        time.sleep(0.5)
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        tags = detector.detect(gray)
+        camera_points = []
+
+        for tag in tags:
+            tag_id = tag.tag_id
+            if tag_id not in APRILTAG_WORLD_COORDS:
+                continue
+            R, t = estimate_pose(tag.corners)
+            if R is None:
+                continue
+
+            camera_pos_tag = -R.T @ t
+            tag_world = APRILTAG_WORLD_COORDS[tag_id][:3].reshape(3, 1)
+
+            x_world = -camera_pos_tag[0][0] + tag_world[0][0]
+            y_world = camera_pos_tag[2][0] + tag_world[1][0]
+
+            cam_pos_world = np.array([x_world, y_world, 0.0])
+            camera_points.append(cam_pos_world.flatten())
+
+        if camera_points:
+            cam_pos = np.mean(camera_points, axis=0)[:2]
+            print(f"[Land] Current Position: {cam_pos}")
+            if cam_pos is None:
+                print("[Land] no ref tag – hover")
+                tello_command(tello, ("back", 20))
+                time.sleep(0.5); continue
+            dx = target[0] - cam_pos[0]
+            dy = target[1] - cam_pos[1]
+            distance = np.linalg.norm([dx, dy])
+            print(f"[Land] Δ({dx:.2f} ,  {dy:.2f}) d = {distance:.2f} m")
+
+            if distance < 0.1:
+                print("[Land] arrive target, really to land...")
+                tello.land()
+                return True
+
+            move_x = int(np.clip(dx * 100, -50, 50))
+            move_y = int(np.clip(dy * 100, -50, 50))
+            if abs(move_y) > 20: tello_command(tello, ("forward" if move_y < 0 else "back", abs(move_y)))
+            elif abs(move_y) > 10: tello_command(tello, ("back", 20))
+            if abs(move_x) > 20: tello_command(tello, ("right" if move_x < 0 else "left", abs(move_x)))
+            elif abs(move_x) > 10: tello_command(tello, ("right", 20))
+            time.sleep(0.5)
 
 ###################
 # === MAIN =======
@@ -221,6 +242,8 @@ def main():
             print(f"  id {tid}: ({x:.2f},{y:.2f}) err {err:.2f}m")
 
         # Phase 3: navigate to landing spot
+        tello_command(tello, ("back", 100))
+        target_pos = np.array(PROFESSOR_LANDING_SPOTS[label] + [0])
         print("[INFO] Navigating to landing spot...")
         navigate_and_land(tello, fr, detector, target_pos)
 
