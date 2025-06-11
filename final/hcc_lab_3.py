@@ -172,7 +172,7 @@ def calculate_drone_position(known_tag_id, tag_pose, ar_word):
     if known_tag_id in ar_word:
         
         # Drone position = Tag world position - offset
-        drone_x = ar_word[known_tag_id][0] - tag_pose[0]
+        drone_x = ar_word[known_tag_id][0] + tag_pose[0]
         drone_y = ar_word[known_tag_id][1] - tag_pose[2]
         
         return np.array([drone_x, drone_y])
@@ -239,22 +239,13 @@ def plot_trajectory(control_poses, tag_pose, kalmanfilter_pose):
     plt.axis("equal")
     plt.show()
 
-def calculate_unknown_tag_position(drone_pos, tag_pose, drone_yaw=0):
+def calculate_unknown_tag_position(drone_pos, tag_pose):
     """Calculate unknown tag's world position from drone position and relative pose"""
-    cos_yaw = np.cos(np.radians(drone_yaw))
-    sin_yaw = np.sin(np.radians(drone_yaw))
-    
-    # Tag position in camera frame
-    camera_x = tag_pose[0]  # right
-    camera_z = tag_pose[2]  # forward
-    
-    # Transform to world coordinates
-    world_offset_x = cos_yaw * camera_x + sin_yaw * camera_z
-    world_offset_y = -sin_yaw * camera_x + cos_yaw * camera_z
+
     
     # Unknown tag world position
-    tag_world_x = drone_pos[0] + world_offset_x
-    tag_world_y = drone_pos[1] + world_offset_y
+    tag_world_x = drone_pos[0] + tag_pose[0] 
+    tag_world_y = drone_pos[1] - tag_pose[2] 
     
     return np.array([tag_world_x, tag_world_y])
     
@@ -318,7 +309,7 @@ def main():
     unknown_tags_kf = {}  # Store unknown tag positions for kalman filter localization
     professor_detected = None
     landing_spot = None
-    drone_yaw = 0.0  # Track drone's orientation
+    
     
     try:
         # Phase 1: Object Detection (Professor Recognition)
