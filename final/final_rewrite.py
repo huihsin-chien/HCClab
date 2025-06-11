@@ -5,6 +5,7 @@ from pupil_apriltags import Detector
 import cv2
 import matplotlib.pyplot as plt
 import final_rewrite_setting 
+import os
 
 def detect_apriltag(frame_read, at_detector, camera_params, tag_size):
     """Detect AprilTags in the current frame,
@@ -41,8 +42,9 @@ def detect_apriltag(frame_read, at_detector, camera_params, tag_size):
     cv2.imshow("Tello Stream with AprilTag", frame)
     #save image
     try:
-        cv2.imwrite(f"./images/tello_apriltag_{time.time()}.jpg", frame)
-
+        filename = f"./images/tello_apriltag_{time.time()}.jpg"
+        cv2.imwrite(filename, frame)
+        os.makedirs(os.path.dirname(filename), exist_ok=True)
         
     except Exception as e:
         print(f"Failed to save image: {e}")
