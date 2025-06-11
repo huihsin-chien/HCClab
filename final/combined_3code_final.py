@@ -4,12 +4,14 @@ import time
 from djitellopy import Tello
 from pupil_apriltags import Detector
 from ultralytics import YOLO
-
+import sys
+import os
+sys.stderr = open(os.devnull, 'w')
 # === Project‑specific configuration comes from a single settings module ===
 import final_rewrite_setting as frs  # exposes ar_word, professor_landing_spots, unkonwn_tags, real_unknown_tags
 import final_utile as fu  # exposes detect_apriltags, align_tag
 
-
+# cv2.utils.logging.setLogLevel(cv2.utils.logging.LOG_LEVEL_SILENT)
 
 
 
@@ -59,11 +61,11 @@ def map_unknown_tags(tello: Tello, frame_read, detector: Detector):
         # if wall != "wall_1":
         #     fu.tello_command(tello, ("back", 50))
         if wall == "wall_2":
-            fu.tello_command(tello, ("back", 130))
+            fu.tello_command(tello, ("back", fu.WALL_2_BACK))
         if wall == 'wall_3':
-            fu.tello_command(tello, ("back", 80))
+            fu.tello_command(tello, ("back", fu.WALL_3_BACK))
         if wall == 'wall_4':
-            fu.tello_command(tello, ("back", 130))
+            fu.tello_command(tello, ("back", fu.WALL_4_BACK))
 
 
 
@@ -86,22 +88,22 @@ def map_unknown_tags(tello: Tello, frame_read, detector: Detector):
             print(f"[Map] tag {t['id']} @ ({x:.2f}, {y:.2f})")
 
         if wall == 'wall_1':
-            fu.tello_command(tello, ("forward", 150))
+            fu.tello_command(tello, ("forward", fu.WALL_1_BACK))  # Move to center
             fu.align_tag(tello, frame_read, detector, fu.CAMERA_PARAMS, fu.TAG_SIZE, 100, front_distance=1.5)
             fu.tello_command(tello, ("ccw", 90))  # Turn to face wall 2
         elif wall == 'wall_2':
-            fu.tello_command(tello, ("forward", 130))
+            fu.tello_command(tello, ("forward", fu.WALL_2_BACK))
             fu.tello_command(tello, ("cw", 90))  # Turn to face (0, 0)
             fu.align_tag(tello, frame_read, detector, fu.CAMERA_PARAMS, fu.TAG_SIZE, 100, front_distance=1.0)  # Align to tag 100, distance 100 cm
             fu.tello_command(tello, ("cw", 180)) # Turn to face wall 3
         elif wall == 'wall_3':
-            fu.tello_command(tello, ("forward", 90)) # Move back to center
+            fu.tello_command(tello, ("forward", fu.WALL_3_BACK)) # Move back to center
             fu.tello_command(tello, ("cw", 180)) # Turn to face wall_1
             fu.align_tag(tello, frame_read, detector, fu.CAMERA_PARAMS, fu.TAG_SIZE, 100, front_distance=1.5)  # Align to tag 100, distance 150 cm
             fu.tello_command(tello, ("cw", 90)) # Turn to face wall 4
         elif wall == 'wall_4':
             fu.tello_command(tello, ("ccw", 90)) # Turn to face wall 1
-            fu.tello_command(tello, ("forward", 130)) # Move back to center
+            fu.tello_command(tello, ("forward", fu.WALL_4_BACK)) # Move back to center
     return locations
 
 ########################################################
