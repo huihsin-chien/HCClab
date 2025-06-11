@@ -57,7 +57,7 @@ def map_unknown_tags(tello: Tello, frame_read, detector: Detector):
             fu.tello_command(tello, ("ccw", 90)); continue
         if wall != "wall_1":
             fu.tello_command(tello, ("back", 50))
-        avg_tags = fu.average_apriltag_detection(frame_read, detector, 10)
+        avg_tags = fu.average_apriltag_detection(frame_read, detector,fu.CAMERA_PARAMS,fu.TAG_SIZE, 10)
         ref_tag = next((t for t in avg_tags if t["id"] in frs.ar_word), None)
         for t in avg_tags:
             if t["id"] not in expected: continue
