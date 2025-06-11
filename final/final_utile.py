@@ -23,6 +23,12 @@ CAMERA_MATRIX = np.array([[CAMERA_PARAMS[0], 0, CAMERA_PARAMS[2]],
 TAG_SIZE = 0.166  # metres
 
 
+WALL_1_BACK = 150
+WALL_2_BACK = 130
+WALL_3_BACK = 80 #80 - 100
+WALL_4_BACK = 130
+
+
 def tello_command(tello: Tello, movement: tuple[str, int]) -> np.ndarray:
     """Execute a basic Tello SDK movement and return a 3‑vector Δp in metres (body frame)."""
     cmd, value = movement
@@ -92,7 +98,7 @@ def detect_apriltag(frame_read, at_detector, camera_params, tag_size):
     return tags_info
 
 
-def average_apriltag_detection(frame_read, at_detector, camera_params, tag_size, num=10):
+def average_apriltag_detection(frame_read, at_detector, camera_params, tag_size = TAG_SIZE, num=10):
     """Detect AprilTags multiple times and return average pose for each tag id"""
     tag_accumulator = {}
     tag_counts = {}
