@@ -41,7 +41,8 @@ def detect_apriltag(frame_read, at_detector, camera_params, tag_size):
     cv2.imshow("Tello Stream with AprilTag", frame)
     #save image
     try:
-        cv2.imwrite(f"./tello_apriltag_{time.time()}.jpg", frame)
+        cv2.imwrite(f"./images/tello_apriltag_{time.time()}.jpg", frame)
+
         
     except Exception as e:
         print(f"Failed to save image: {e}")
@@ -115,6 +116,69 @@ def average_apriltag_detection(frame_read, at_detector, camera_params, tag_size,
 # 使用方式（在 main 或 for 迴圈裡）：
 # tags_info_avg = average_apriltag_detection(frame_read, at_detector, camera_params, tag_size, num=10)
 
+def align_tag(tello, frame_read, at_detector, camera_params, tag_size, target_tag_id, front_distance):
+    """
+    讓 Tello 對齊指定 tag，並停在 tag 正前方 front_distance (單位: 公尺)
+    """
+    max_attempts = 10
+    retry = False
+    for attempt in range(max_attempts):
+        tags_info = detect_apriltag(frame_read, at_detector, camera_params, tag_size)
+        tag = next((t for t in tags_info if t['id'] == target_tag_id), None)
+        if tag is None:
+            print(f"Tag {target_tag_id} not found, retrying...")
+            time.sleep(0.5)
+            continue
+
+        # tag['pose']: [x, y, z] (單位: 公尺)，x: 左右, y: 上下, z: 前後
+        x, y, z = tag['pose']
+        print(f"Aligning to tag {target_tag_id}: x={x:.2f}m, y={y:.2f}m, z={z:.2f}m")
+
+        # 計算需要移動的距離
+        move_left_right = int(-x * 100)   # x>0: tag在右邊，要往左移
+        move_up_down   = int(-y * 100)    # y>0: tag在下方，要往上移
+        move_forward   = int((z - front_distance) * 100)  # z>front_distance: 要往前靠近
+
+                # 左右對齊
+        if abs(move_left_right) > 10:
+            move_cm = min(max(abs(move_left_right), 20), 500)
+            if move_left_right > 0:
+                tello.move_left(move_cm)
+            else:
+                tello.move_right(move_cm)
+            time.sleep(1)
+
+        # 上下對齊
+        if abs(move_up_down) > 10:
+            move_cm = min(max(abs(move_up_down), 20), 500)
+            if move_up_down > 0:
+                tello.move_up(move_cm)
+            else:
+                tello.move_down(move_cm)
+            time.sleep(1)
+
+        # 前後對齊
+        if abs(move_forward) > 10:
+            move_cm = min(max(abs(move_forward), 20), 500)
+            if move_forward > 0:
+                tello.move_forward(move_cm)
+            else:
+                tello.move_back(move_cm)
+            time.sleep(1)
+
+        # 如果都在容許範圍內就結束
+        if abs(move_left_right) <= 10 and abs(move_up_down) <= 10 and abs(move_forward) <= 10:
+            print("Alignment complete.")
+            return True
+            break
+        if retry != True and attempt >= max_attempts - 1:
+            tello.move_back(50)
+            print("Failed to align, try again.")
+            max_attempts = 0
+            retry = True
+    else:
+        print(f"Failed to align to tag {target_tag_id}")
+        return False
 
 
 def main():
@@ -131,7 +195,7 @@ def main():
     print(f"Battery: {tello.get_battery()}%")
     if tello.get_battery() < 20:
         print("Battery too low! Please charge the drone.")
-        return
+        
     tello.streamon()
     frame_read = tello.get_frame_read()
     # Wait for video stream to start
@@ -196,11 +260,13 @@ def main():
             print(f"Detecting tags at {wall}...")
             if tags:
                 # Move back to avoid small field of view
-                if wall != 'wall_1':
-                    tello_command(tello, ("back", 110))
+                if wall == 'wall_2':
+                    tello_command(tello, ("back", 120))
+                if wall == 'wall_3':
+                    tello_command(tello, ("back", 100))
+                if wall == 'wall_4':
+                    tello_command(tello, ("back", 120))
                 
-                # if wall == 'wall_3' or wall == 'wall_4':
-                #     tello.move_right(50)  # Move right to get better view of wall 3 and wall 4
                 
                 # Detect AprilTags
                 # 取十次平均
@@ -235,7 +301,7 @@ def main():
 
                         elif wall == 'wall_3':
                             if known_tag is not None:
-                                x = -1 * (tag['pose'][0] - known_tag['pose'][0]) + final_rewrite_setting.ar_word[known_tag["id"]][0]
+                                x = (tag['pose'][0] - known_tag['pose'][0]) + final_rewrite_setting.ar_word[known_tag["id"]][0]
                             else:
                                 x = -1 * tag['pose'][0] + 1.5 
                                 print("Warning: No known tag found for wall 3, using tag pose directly.")
@@ -252,13 +318,25 @@ def main():
                 # Move back to center and turn to next wall
                 
                 if wall == 'wall_1':
-                    tello_command(tello, ("forward", 160))
-                # elif wall == 'wall_3' or wall == 'wall_4':
-                #     tello.move_left(50)  # Move left to get back to center
+                    tello_command(tello, ("forward", 150))
+                    tello_command(tello, ("ccw", 90))  # Turn to face wall 2
+                    align_tag(tello, frame_read, at_detector, camera_params, tag_size, 100, front_distance=1.5)
+                elif wall == 'wall_2':
+                    tello_command(tello, ("forward", 120))
+                    tello_command(tello, ("cw", 90))  # Turn to face (0, 0)
+                    align_tag(tello, frame_read, at_detector, camera_params, tag_size, 100, front_distance=1.0)  # Align to tag 100, distance 100 cm
+                    tello_command(tello, ("cw", 180)) # Turn to face wall 3
+                elif wall == 'wall_3':
+                    tello_command(tello, ("forward", 100)) # Move back to center
+                    tello_command(tello, ("cw", 180)) # Turn to face wall_1
+                    align_tag(tello, frame_read, at_detector, camera_params, tag_size, 100, front_distance=1.5)  # Align to tag 100, distance 150 cm
+                    tello_command(tello, ("cw", 90)) # Turn to face wall 4
+                elif wall == 'wall_4':
+                    tello_command(tello, ("forward", 120)) # Move back to center
+                    tello_command(tello, ("ccw", 90)) # Turn to face wall 1
+                # else:
                 #     tello_command(tello, ("forward", 110))
-                else:
-                    tello_command(tello, ("forward", 110))
-                tello_command(tello, ("ccw", 90))
+                # tello_command(tello, ("ccw", 90))
 
 
             else:
@@ -286,15 +364,17 @@ def main():
         
 
 
-# TODO
-# 測試 wall 3 辨識正確: wall 3 and wall 4 都有無法把整面前拍進去的問題
-# 調整：若 tello 視窗內沒有辦法把所有已知+未知 tag 照進去，可能要退後或左右移
-# 10 張照片中，若沒有每一張都有辨識到，還是要把該 tag 算進去
+# 若 tello 視窗內沒有辦法把所有已知+未知 tag 照進去，可能要退後或左右移
 # tello.move_xxxx 的移動很不準，無法用預定前進多少，可以轉彎後、前進前/後都拍照，
 
+# 在拍攝 wall 2 之前，先對齊 tag 100，回到距離(0,0)正前方 150 cm 的位置，然後轉90度
+
+# wall 3 先轉回正面，對齊 tag 100，回到距離(0,0)正前方 100 cm 的位置，然後轉180度，再退後 50 cm
+# wall 4 先轉回正面，對齊 tag 100，回到距離(0,0)正前方 150 cm 的位置，然後轉90度，再退後 30 cm
 
 # 起飛的時候稍微往左放一點
 # checked: 修好沒有 known tag 時的定位
+
 
 if __name__ == '__main__':
     main()

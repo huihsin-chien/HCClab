@@ -26,6 +26,7 @@ real_unknown_tags = {
     200: np.array([1.05, 0.0]),  # tag_id 200, wall 3
     201: np.array([1.55, 1.07]), # tag_id 201, wall 2
     202: np.array([-1.5, 2.08]), # tag_id 202, wall 4
+    111: np.array([-0.7, 3.0]),  # tag_id 111, wall 3
 }
 
 
