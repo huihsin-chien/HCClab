@@ -30,10 +30,10 @@ real_unknown_tags = {
 
 
 professor_landing_spots = {
-    'hh_shuai': [0, 1.5],
-    'lc_wang': [0.75, 0.75], 
-    'lw_ko': [0.75, 2.25],
-    'cc_wang': [-0.75, 2.25]
+    'hhs': [0, 1.5],
+    'lcw': [0.75, 0.75], 
+    'lwk': [0.75, 2.25],
+    'ccw': [-0.75, 2.25]
 }
 
 unkonwn_tags = {
