@@ -87,7 +87,6 @@ def tello_command(tello, movement_request):
         
     return dp
 
-# ...existing code...
 
 def average_apriltag_detection(frame_read, at_detector, camera_params, tag_size, num=10):
     """Detect AprilTags multiple times and return average pose for each tag id"""
@@ -198,8 +197,10 @@ def main():
             if tags:
                 # Move back to avoid small field of view
                 if wall != 'wall_1':
-                    tello_command(tello, ("back", 50))
+                    tello_command(tello, ("back", 110))
                 
+                # if wall == 'wall_3' or wall == 'wall_4':
+                #     tello.move_right(50)  # Move right to get better view of wall 3 and wall 4
                 
                 # Detect AprilTags
                 # 取十次平均
@@ -221,23 +222,22 @@ def main():
                                 x = -1 * (tag['pose'][0] - known_tag['pose'][0]) + final_rewrite_setting.ar_word[known_tag["id"]][0]
                             else:
                                 x = -1 * tag['pose'][0]  # Use x from pose
+                                print("Warning: No known tag found for wall 1, using tag pose directly.")
                             y = 0.0  # Fixed y for wall 1
                             
                         elif wall == 'wall_2':
                             x = 1.55  # Fixed x for wall 2
-                            # y = tag['pose'][1]  # Use y from pose
-                            # wall 2 的  y 座標為 已知tag  再加上 -1 * tag['pose'][0]
                             if known_tag is not None:
                                 y =  -1 * (tag['pose'][0] - known_tag['pose'][0]) + final_rewrite_setting.ar_word[known_tag["id"]][1]
                             else:
-                                y = tag['pose'][0]  
+                                y = -1 * tag['pose'][0] + 1.5
                                 print("Warning: No known tag found for wall 2, using tag pose directly.")
+
                         elif wall == 'wall_3':
-                            # x = tag['pose'][0]  # Use x from pose
                             if known_tag is not None:
                                 x = -1 * (tag['pose'][0] - known_tag['pose'][0]) + final_rewrite_setting.ar_word[known_tag["id"]][0]
                             else:
-                                x = tag['pose'][0] * -1  
+                                x = -1 * tag['pose'][0] + 1.5 
                                 print("Warning: No known tag found for wall 3, using tag pose directly.")
                             y = 3.0  # Fixed y for wall 3
                         elif wall == 'wall_4':
@@ -245,19 +245,22 @@ def main():
                             if known_tag is not None:
                                 y = (tag['pose'][0] - known_tag['pose'][0]) + final_rewrite_setting.ar_word[known_tag["id"]][1]
                             else:
-                                # y = tag['pose'][1] * -1  
-                                y = tag['pose'][0] * -1  
+                                y = tag['pose'][0] * -1 + 1.5
                                 print("Warning: No known tag found for wall 4, using tag pose directly.")
-                            # y = tag['pose'][2]  # Use y from pose
-                        
                         print(f"Detected tag {tag['id']} at ({x}, {y}) on {wall}")
                         unknown_tags_location.append((tag['id'], x, y))
                 # Move back to center and turn to next wall
+                
                 if wall == 'wall_1':
-                    tello_command(tello, ("forward", 150))
+                    tello_command(tello, ("forward", 160))
+                # elif wall == 'wall_3' or wall == 'wall_4':
+                #     tello.move_left(50)  # Move left to get back to center
+                #     tello_command(tello, ("forward", 110))
                 else:
-                    tello_command(tello, ("forward", 50))
+                    tello_command(tello, ("forward", 110))
                 tello_command(tello, ("ccw", 90))
+
+
             else:
                 print(f"No tags detected at {wall}, turning to next wall.")
                 tello_command(tello, ("ccw", 90))
@@ -284,9 +287,14 @@ def main():
 
 
 # TODO
-# 測試 wall 3 辨識正確
+# 測試 wall 3 辨識正確: wall 3 and wall 4 都有無法把整面前拍進去的問題
 # 調整：若 tello 視窗內沒有辦法把所有已知+未知 tag 照進去，可能要退後或左右移
+# 10 張照片中，若沒有每一張都有辨識到，還是要把該 tag 算進去
+# tello.move_xxxx 的移動很不準，無法用預定前進多少，可以轉彎後、前進前/後都拍照，
 
+
+# 起飛的時候稍微往左放一點
+# checked: 修好沒有 known tag 時的定位
 
 if __name__ == '__main__':
     main()

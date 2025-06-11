@@ -15,6 +15,13 @@ ar_word = { # AprilTag在世界座標的真實位置（x, y）。meters
 #201: 1.55, 1.07
 #202: -1.5, 2.08
 # 起飛到中間：2.51
+
+# DEBUG 用：109 110 111 112
+# 109: wall 2
+# 110 111: wall 3
+# 112: wall 4
+
+
 real_unknown_tags = {
     200: np.array([1.05, 0.0]),  # tag_id 200, wall 3
     201: np.array([1.55, 1.07]), # tag_id 201, wall 2
@@ -31,9 +38,9 @@ professor_landing_spots = {
 
 unkonwn_tags = {
     'wall_1': [200],
-    'wall_2': [201],
-    'wall_3': [],
-    'wall_4': [202],
+    'wall_2': [201, 109],
+    'wall_3': [110, 111],
+    'wall_4': [202, 112],
 }
 
 # Landing spots
