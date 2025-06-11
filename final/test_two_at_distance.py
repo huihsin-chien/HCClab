@@ -6,7 +6,7 @@ from pupil_apriltags import Detector
 import cv2
 import matplotlib.pyplot as plt
 import threading
-import final_setting  # Import the settings from final_setting.py
+import final_rewrite_setting  # Import the settings from final_setting.py
 def detect_apriltag(frame_read, at_detector, camera_params, tag_size):
     """Detect AprilTags in the current frame,
        回傳: tags_info (list of dicts with tag_id and pose),
