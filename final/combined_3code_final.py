@@ -206,3 +206,11 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+# 1. 使用WALL_1_BACK = 150
+# WALL_2_BACK = 130
+# WALL_3_BACK = 80 #80 - 100
+# WALL_4_BACK = 130
+
+# 2. 修掉錯誤訊息 
+# 3. 單個功能程式
