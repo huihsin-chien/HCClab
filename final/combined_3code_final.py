@@ -55,9 +55,18 @@ def map_unknown_tags(tello: Tello, frame_read, detector: Detector):
         print(f"[Map] {wall} – expected {expected}")
         if not expected:
             fu.tello_command(tello, ("ccw", 90)); continue
-        if wall != "wall_1":
-            fu.tello_command(tello, ("back", 50))
-        avg_tags = fu.average_apriltag_detection(frame_read, detector, 10)
+        # if wall != "wall_1":
+        #     fu.tello_command(tello, ("back", 50))
+        if wall == "wall_2":
+            fu.tello_command(tello, ("back", 120))
+        if wall == 'wall_3':
+            fu.tello_command(tello, ("back", 100))
+        if wall == 'wall_4':
+            fu.tello_command(tello, ("back", 120))
+
+
+
+        avg_tags = fu.average_apriltag_detection(frame_read, detector, fu.CAMERA_PARAMS, fu.TAG_SIZE,10)
         ref_tag = next((t for t in avg_tags if t["id"] in frs.ar_word), None)
         for t in avg_tags:
             if t["id"] not in expected: continue
@@ -68,14 +77,30 @@ def map_unknown_tags(tello: Tello, frame_read, detector: Detector):
             elif wall == "wall_2":
                 x, y = 1.55, -(pose[0] - (ref_tag["pose"][0] if ref_tag else 0)) + (frs.ar_word.get(ref_tag["id"], [0,0])[1] if ref_tag else 0)
             elif wall == "wall_3":
-                x = (pose[0] - (ref_tag["pose"][0] if ref_tag else 0)) - (frs.ar_word.get(ref_tag["id"], [0,0])[0] if ref_tag else 0)
+                x = (pose[0] - (ref_tag["pose"][0] if ref_tag else 0)) + (frs.ar_word.get(ref_tag["id"], [0,0])[0] if ref_tag else 0)
                 y = 3.0
             else:  # wall_4
                 x, y = -1.5, (pose[0] - (ref_tag["pose"][0] if ref_tag else 0)) + (frs.ar_word.get(ref_tag["id"], [0,0])[1] if ref_tag else 0)
             locations.append((t["id"], x, y))
             print(f"[Map] tag {t['id']} @ ({x:.2f}, {y:.2f})")
-        fu.tello_command(tello, ("forward", 150 if wall == "wall_1" else 50))
-        fu.tello_command(tello, ("ccw", 90))
+
+        if wall == 'wall_1':
+            fu.tello_command(tello, ("forward", 150))
+            fu.tello_command(tello, ("ccw", 90))  # Turn to face wall 2
+            fu.align_tag(tello, frame_read, detector, fu.CAMERA_PARAMS, fu.TAG_SIZE, 100, front_distance=1.5)
+        elif wall == 'wall_2':
+            fu.tello_command(tello, ("forward", 120))
+            fu.tello_command(tello, ("cw", 90))  # Turn to face (0, 0)
+            fu.align_tag(tello, frame_read, detector, fu.CAMERA_PARAMS, fu.TAG_SIZE, 100, front_distance=1.0)  # Align to tag 100, distance 100 cm
+            fu.tello_command(tello, ("cw", 180)) # Turn to face wall 3
+        elif wall == 'wall_3':
+            fu.tello_command(tello, ("forward", 100)) # Move back to center
+            fu.tello_command(tello, ("cw", 180)) # Turn to face wall_1
+            fu.align_tag(tello, frame_read, detector, fu.CAMERA_PARAMS, fu.TAG_SIZE, 100, front_distance=1.5)  # Align to tag 100, distance 150 cm
+            fu.tello_command(tello, ("cw", 90)) # Turn to face wall 4
+        elif wall == 'wall_4':
+            fu.tello_command(tello, ("ccw", 90)) # Turn to face wall 1
+            fu.tello_command(tello, ("forward", 120)) # Move back to center
     return locations
 
 ########################################################
