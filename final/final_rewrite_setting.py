@@ -31,17 +31,17 @@ real_unknown_tags = {
 
 
 professor_landing_spots = {
-    'hhs': [0, 1.5],
+    'hhs': [-0.75, 2.25],
     'lcw': [0.75, 0.75], 
-    'lwk': [0.75, 2.25],
-    'ccw': [-0.75, 2.25]
+    'lwk': [0, 0.75],
+    'ccw': [0, 2.25]
 }
 
 unkonwn_tags = {
-    'wall_1': [200],
-    'wall_2': [201, 109],
-    'wall_3': [110, 111],
-    'wall_4': [202, 112],
+    'wall_1': [],
+    'wall_2': [],
+    'wall_3': [],
+    'wall_4': [],
 }
 
 # Landing spots
